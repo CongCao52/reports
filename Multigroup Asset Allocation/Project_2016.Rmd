@@ -1,0 +1,269 @@
+
+
+```{r}
+# Cong Cao 
+
+data<- read.csv("Stocks.csv",header=TRUE)
+library("stockPortfolio")
+ticker <-  c("SO", "DUK", "D", "HE", "EIX","F","TTM", "TM","HMC","HOG","BAC","C","JPM","KEY","WFC","COP","CVX","IMO","YPF","MRO","A","AMGN","BIIB","CELG","GILD","^GSPC")
+gr1 <- getReturns(ticker, start='2008-12-31', end='2013-12-31')
+gr2 <- getReturns(ticker, start='2013-12-31', end='2016-04-30')
+summary(gr1)
+gr1$R		# returns
+gr1$ticker  # original ticker
+gr1$period  # sample spacing
+gr1$start   # when collection started
+gr1$end     # when collection ended
+#Part a
+d1<-as.numeric(as.matrix(data[,2:27]))
+d<-matrix(d1,89,26)
+#find the return of the stocks by excel data
+for(i in 1:26){
+d[,i]<-rev(d[,i])}
+totalreturns <- (d[-1,1:26]-d[-nrow(d),1:26])/d[-nrow(d),1:26]
+totalreturns
+
+# the return form 12/31/2008 to 12/31/2013
+returns<-totalreturns[1:60,]
+returns
+# the 25 stocks returns
+stockreturns<-returns[,1:25]
+
+# column means of stocks
+R_bar<-as.matrix(colMeans(stockreturns))
+# Find the variance-covariance matrix. 
+var_cov<- cov(stockreturns)
+# Find the inverse of variance-covariance matrix. 
+var_covinv<-solve(var_cov)
+rf=0.001
+r1<-R_bar-rf
+z<-var_covinv%*%r1
+# the vector x 
+x<-z/sum(z)
+R_Gbar<-t(x)%*%R_bar
+var_G<-t(x)%*%var_cov%*%x
+sd_G<-var_G^0.5
+# x is the composition of the point of tangency. 
+x
+R_Gbar
+sd_G
+# use stock model function and get the same result
+m0 <- stockModel(gr1,Rf=0.001,drop = 26)
+opm0<-optimalPort(m0)
+y0<-opm0$R
+x0<-opm0$risk
+y0
+x0
+opm0$X
+
+
+# Draw the line.
+slope<-(R_Gbar-rf)/(sd_G)
+seq_risk<-seq(0,0.05,0.01)
+seq_return<-seq_risk*slope+rf
+plot(seq_risk, seq_return, type = "l", col = "blue",xlab="Risk (standard deviation)", ylab="Expected return")
+points(sd_G, R_Gbar, cex=1, col="blue", pch=10)
+text(sd_G, R_Gbar+0.001, "point of tangency")
+
+#(2)
+# First point  with Rf=-10
+R<-R_bar+10
+zb<-var_covinv%*%R
+# the vector x 
+x1<-zb/sum(zb)
+# x is the composition of the point of tangency. 
+x1
+R_Gbar1<-t(x1)%*%R_bar
+#Expected return of portfolio G. 
+var_G1<-t(x1)%*%var_cov%*%x1
+sd_G1<-var_G1^0.5
+#Standard deviation of portfolio G. 
+sd_G1
+covAB<-t(x)%*%var_cov%*%x1
+a <- seq(-2, 2, .001)
+b <- 1-a
+rp <- a*R_Gbar + b*R_Gbar1
+sdp <- sqrt(a^2*var_G + b^2*var_G1 + 2*a*b*covAB)
+plot(sdp, rp, col="black", type="l")
+points(sd_G, R_Gbar, pch=19)
+points(sd_G1, R_Gbar1, pch=19)
+
+
+
+# using stockPortfolio package to drive
+gr1 <- getReturns(ticker, start='2008-12-31', end='2013-12-31')
+model<-stockModel(gr1,shortSelling = TRUE, model = c("none"), freq=c("month") )
+portPossCurve(model, effFrontier = FALSE, add = FALSE, type = "l", xlab = "Risk", ylab = "Expected Return", doNotPlot = FALSE)
+
+
+#3 Equally allocate funds into stocks
+e<-matrix(c(0.04),nrow=25,byrow = TRUE)
+equalexp<-t(e)%*%R_bar
+equalvar<-t(e)%*%var_cov%*%e
+#Standard deviation of portfolio
+equalsd<-equalvar^0.5
+
+# another way
+means1 <- colMeans(as.data.frame(gr1$R[,-26]))
+var_cov1 <- cov(gr1$R[,-26])
+x_equal <- rep(1,25)/25
+Rbar_equal <- t(x_equal) %*% means1
+sd_equal <- (t(x_equal) %*% var_cov1 %*% x_equal)^0.5
+y2<-Rbar_equal
+x2<-sd_equal
+y2
+x2
+####################################################################
+#4 SIM
+rm<-mean(gr2$R[,26])
+sm<-sd(gr2$R[,26])
+
+# Short selling are allowed
+m1  <- stockModel(gr1,Rf=0.001, model='SIM', shortSelling = c("y"),index=26)
+opm1<-optimalPort(m1)
+opm1$X
+summary(opm1)
+x3<-opm1$risk
+y3<-opm1$R
+
+
+b3<-cov(t(opm1$X%*%t(m1$returns)),m1$marketReturns)/var(m1$marketReturns)
+a3<-opm1$R-b3*colMeans(m1$marketReturns)
+
+#Short selling are not allowed 
+m2  <- stockModel(gr1,Rf=0.001, model='SIM', shortSelling = c("n"),index=26)
+opm2<-optimalPort(m2)
+x4<-opm2$risk
+y4<-opm2$R
+opm2$X
+
+b4<-cov(t(opm2$X%*%t(m2$returns)),m2$marketReturns)/var(m2$marketReturns)
+a4<-opm2$R-b4*colMeans(m2$marketReturns)
+
+#################################################
+# Constant correlation model
+#when short sell are allowed. 
+m3<-stockModel(gr1,Rf=0.001, model='CCM', shortSelling = c("y"),drop=26)
+opm3<-optimalPort(m3)
+x5<-opm3$risk
+y5<-opm3$R
+opm3$X
+#when short sell are not allowed. 
+m4<-stockModel(gr1,Rf=0.001, model='CCM', shortSelling = c("n"),drop=26)
+opm4<-optimalPort(m4)
+x6<-opm4$risk
+y6<-opm4$R
+opm4$X
+#################################################
+#mutigroups model 
+ind <- c("Auto Manufacturers", "Auto Manufacturers", "Auto Manufacturers", "Auto Manufacturers", "Auto Manufacturers","Electrical Utilities","Electrical Utilities","Electrical Utilities","Electrical Utilities","Electrical Utilities","Money Center Banks","Money Center Banks","Money Center Banks","Money Center Banks","Money Center Banks","Fueling & Oil","Fueling & Oil","Fueling & Oil","Fueling & Oil","Fueling & Oil", "Biotechnology", "Biotechnology", "Biotechnology", "Biotechnology", "Biotechnology", "Index")
+data <- as.data.frame(cbind(ticker, ind))
+data
+ticker <- data$ticker
+ind <- data$ind
+
+mc  <- stockModel(gr1,Rf=0.001, model='MGM', industry=ind,drop = 26)
+opmc <- optimalPort(mc)
+x7<-opmc$risk
+y7<-opmc$R
+opmc$X
+#(7)
+
+m<-matrix(c(x0,x2,x3,x4,x5,x6,x7,y0,y2,y3,y4,y5,y6,y7),ncol=7,nrow=2,byrow=TRUE)
+rownames(m) <- c("risk","R")
+m
+plot(optimalPort(m0),xlim=c(0,0.06),ylim=c(-0.02,0.04))
+portPossCurve(model,add = TRUE, type = "l", xlab = "Risk", ylab = "Expected Return")
+
+points(x0,y0, col="green", pch=19)
+points(x2,y2, col="blue", pch=19)
+points(x3,y3, col="gray", pch=19)
+points(x4,y4, col="orange", pch=19)
+points(x5,y5, col="purple", pch=19)
+points(x6,y6, col="red", pch=19)
+points(x7,y7, col="blue", pch=19)
+
+########################################
+#part b
+
+#a 
+r0<-colMeans(gr2$R[,-26])
+v <- cov(gr2$R[,-26])  
+options(warn = -1)
+tpop1 <- testPort(gr2, opm1)
+tpEqu <- testPort(gr2$R[,-26], X=rep(1,25)/25)
+r1<-t(tpEqu$X)%*%r0
+s1<-(t(tpEqu$X) %*% v %*% tpEqu$X)^0.5
+
+
+b11<-cov(t(tpEqu$X%*%t(gr2$R[,-26])),gr2$R[,26])/var(gr2$R[,26])
+
+
+
+#b
+tpopsim<-testPort(gr2,opm2)
+r2<-t(tpopsim$X)%*%r0
+s2<-(t(tpopsim$X) %*% v%*% tpopsim$X)^0.5
+b22<-cov(t(tpopsim$X%*%t(gr2$R[,-26])),gr2$R[,26])/var(gr2$R[,26])
+sum(tpopsim$X)
+bp<-b22
+#c
+returnss<-t((opm2$X)%*%t(gr2$R[,-26]))
+a<-rep(0.001,29)
+mo<-cbind(returnss,a)
+colnames(mo)<-c("R","Rf")
+tpsim1<- testPort(mo, X=rep(1,2)/2)
+r3<-0.5*r2+0.5*0.001
+s3<-0.5*s2
+b33<-0.5*bp
+
+#d 
+tpopccm <- testPort(gr2, opm4)
+r4<-t(tpopccm$X)%*%r0
+s4<-(t(tpopccm$X) %*% v %*% tpopccm$X)^0.5
+b44<-cov(t(tpopccm$X%*%t(gr2$R[,-26])),gr2$R[,26])/var(gr2$R[,26])
+
+#e
+tpopmgm <- testPort(gr2, opmc)
+
+r5<-t(tpopmgm$X)%*%r0
+s5<-(t(tpopmgm$X) %*% v %*% tpopmgm$X)^0.5
+b55<-cov(t(tpopmgm$X%*%t(gr2$R[,-26])),gr2$R[,26])/var(gr2$R[,26])
+###################
+plot(tpop1, lty=1, ylim=c(0.5, 1.5),col="pink",xlab="time",ylab="r",ylm=c(-1,1))
+lines(tpEqu, lty=2, col="orange")
+lines(tpopsim, lty=3, col="green")
+lines(tpsim1,lty=4,col="yellow")
+lines(tpopccm, lty=5, col="grey")
+lines(tpopmgm, lty=6, col="purple")
+lines(cumprod(1+rev(gr2$R[, 26])), col="black", lwd=2)
+
+legend('bottomleft', lty=1:7, c('Markowitz', 'EQUAL',  'SIM_NSS',  'half to riskfree', 'CCM_NSS', 'MGM', 'S&P500'), col=c("pink","orange", "green", "yellow","grey", "purple","black"), cex = 0.55)
+##################################
+
+
+r<-matrix(c(r1,r2,r3,r4,r5,rm))
+s<-matrix(c(s1,s2,s3,s4,s5,sm))
+b<-matrix(c(b11,b22,b33,b44,b55,1))
+r
+#sharp ratio 
+test1<-(r-0.001)/s
+test1
+# SIM_NN (b) is better
+#difference
+test2<-r-(0.001+((rm-0.001)/sm)*s)
+test2
+# SIM_NN (b) is better 
+#Treynor measure
+
+test3<-(r-0.001)/b
+test3
+# SIM_NN (b) is better 
+#test 4
+test4<-r-(0.001+((rm-0.001)/b[6,1])*b)
+test4
+# SIM_NN (b) is better 
+```
+
+
+
